@@ -19,6 +19,7 @@ from schemas.diagnosis import (
     MissingNode,
     ParsedStep,
     RootDivergence,
+    TeachingContent,
 )
 from schemas.session import SessionState
 
@@ -68,6 +69,11 @@ async def _reconstruct_session(row: dict) -> SessionState:
             if ir["parsed_steps_json"]
             else []
         )
+        teaching = (
+            TeachingContent(**json.loads(ir["teaching_json"]))
+            if ir["teaching_json"]
+            else None
+        )
 
         iterations.append(
             DiagnosisOutput(
@@ -84,6 +90,7 @@ async def _reconstruct_session(row: dict) -> SessionState:
                 probe_question=ir["probe_question"],
                 iteration_complete=bool(ir["iteration_complete"]),
                 animation_key=None,
+                teaching=teaching,
             )
         )
 
@@ -121,6 +128,11 @@ async def _run_animation(session_id: str, error_classification: str) -> None:
         iteration_rows = await get_iterations(session_id)
         last_iter = iteration_rows[-1] if iteration_rows else {}
         feedback = (last_iter.get("feedback") or "") if last_iter else ""
+        teaching = (
+            TeachingContent(**json.loads(last_iter["teaching_json"]))
+            if last_iter.get("teaching_json")
+            else None
+        )
 
         script = await generate_manim_script(
             problem=row["problem_text"],
@@ -128,6 +140,10 @@ async def _run_animation(session_id: str, error_classification: str) -> None:
             root_cause=row["final_root_cause"] or "unknown root cause",
             error_classification=error_classification,
             diagnosis_text=feedback,
+            concept_summary=teaching.concept_summary if teaching else "",
+            general_approach=teaching.general_approach if teaching else [],
+            worked_solution=teaching.worked_solution if teaching else [],
+            common_pitfall=teaching.common_pitfall if teaching else "",
         )
         # Store script so the frontend debug viewer can display it
         _animation_state[session_id]["script"] = script

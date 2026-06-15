@@ -9,7 +9,11 @@ where the pipeline fails so we can fix the root cause.
 import asyncio
 import json
 import re
+import sys
 import uuid
+
+# Windows console defaults to cp1252, which can't encode the emoji used below.
+sys.stdout.reconfigure(encoding="utf-8")
 
 from groq import AsyncGroq
 from pydantic import ValidationError

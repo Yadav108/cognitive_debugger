@@ -39,6 +39,7 @@ async def init_db():
                 iteration_complete INTEGER,
                 feedback TEXT,
                 probe_question TEXT,
+                teaching_json TEXT,
                 created_at TEXT,
                 FOREIGN KEY(session_id) REFERENCES sessions(session_id)
             )
@@ -66,7 +67,18 @@ async def init_db():
                 FOREIGN KEY(iteration_id) REFERENCES iterations(iteration_id)
             )
         """)
+
+        # No migration tooling exists yet — add new columns to existing DBs here.
+        await _ensure_column(db, "iterations", "teaching_json", "TEXT")
+
         await db.commit()
+
+
+async def _ensure_column(db: aiosqlite.Connection, table: str, column: str, col_type: str):
+    cursor = await db.execute(f"PRAGMA table_info({table})")
+    cols = [row[1] for row in await cursor.fetchall()]
+    if column not in cols:
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
 
 
 async def insert_session(session_data: dict):

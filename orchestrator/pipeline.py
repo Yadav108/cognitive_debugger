@@ -26,6 +26,7 @@ from schemas.diagnosis import (
     MissingNode,
     RootDivergence,
     InterNodeFailure,
+    TeachingContent,
 )
 from schemas.session import SessionState
 from orchestrator.confidence import compute_final_confidence, should_resolve
@@ -350,6 +351,18 @@ def sanitize_graph_prerequisites(data: dict) -> dict:
     return data
 
 
+def _general_approach_from_graph(graph: ConceptGraph) -> list[str]:
+    """Derive the reusable solution method from required concept-graph nodes,
+    ordered by level — this is the generalizable "how to solve problems
+    like this" procedure, already encoded by P1's graph generation.
+    """
+    return [
+        f"{n.concept}: {n.operation}"
+        for n in sorted(graph.nodes, key=lambda n: (n.level, n.node_id))
+        if n.required
+    ]
+
+
 async def generate_concept_graph(
     session_id: str,
     problem_text: str,
@@ -463,6 +476,7 @@ async def run_diagnosis(
     from prompts.p6p7_divergence import P6P7_SYSTEM, P6P7_USER
     from prompts.p8_ambiguity import P8_SYSTEM, P8_USER
     from prompts.p9p10p11_feedback import P7_SYSTEM, P7_USER
+    from prompts.p12_teach import P12_SYSTEM, P12_USER
 
     session_id = session.session_id
     graph = session.concept_graph
@@ -596,6 +610,36 @@ async def run_diagnosis(
     if result7 is None:
         return None
 
+    # --- Call 8: P12 Teaching Content (only once the student has resolved) ---
+    teaching: TeachingContent | None = None
+    if iteration_complete:
+        result8 = await _llm_call(
+            session_id, iteration_id, "P12_teach",
+            P12_SYSTEM,
+            P12_USER.format(
+                domain=domain,
+                problem_text=session.problem_text,
+                concept_graph_json=graph.model_dump_json(),
+                root_divergence_json=(
+                    root_divergence.model_dump_json() if root_divergence else "null"
+                ),
+                error_classification=result7["error_classification"],
+                feedback=result7["feedback"],
+            ),
+            background_tasks,
+            max_tokens=2048,
+        )
+        if result8 is not None:
+            try:
+                teaching = TeachingContent(
+                    concept_summary=result8["concept_summary"],
+                    general_approach=_general_approach_from_graph(graph),
+                    worked_solution=result8["worked_solution"],
+                    common_pitfall=result8["common_pitfall"],
+                )
+            except (KeyError, ValidationError) as e:
+                print(f"[pipeline] TeachingContent assembly failed: {e}")
+
     # --- Assemble DiagnosisOutput ---
     # DiagnosisOutput.validator requires probe_question=None when iteration_complete=True;
     # null it out here so a chatty LLM response never causes a ValidationError.
@@ -616,6 +660,7 @@ async def run_diagnosis(
             probe_question=probe_question,
             iteration_complete=iteration_complete,
             animation_key=None,
+            teaching=teaching,
         )
     except ValidationError as e:
         print(f"[pipeline] DiagnosisOutput validation failed: {e}")
@@ -638,6 +683,7 @@ async def run_diagnosis(
         "iteration_complete": int(iteration_complete),
         "feedback": diagnosis.feedback,
         "probe_question": diagnosis.probe_question,
+        "teaching_json": teaching.model_dump_json() if teaching else None,
         "created_at": datetime.utcnow().isoformat() + "Z",
     })
 

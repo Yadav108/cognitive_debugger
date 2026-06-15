@@ -1,0 +1,10 @@
+.env
+storage/*.db
+uploads/
+__pycache__
+*.pyc
+.venv
+media/
+static/animations/*.mp4
+static/animations/*.py
+uvicorn_test.log

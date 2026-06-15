@@ -37,6 +37,13 @@ class InterNodeFailure(BaseModel):
     issue: str
 
 
+class TeachingContent(BaseModel):
+    concept_summary: str
+    general_approach: List[str]
+    worked_solution: List[str]
+    common_pitfall: str
+
+
 class DiagnosisOutput(BaseModel):
     concept_graph_id: str
     parsed_steps: List[ParsedStep]
@@ -54,6 +61,7 @@ class DiagnosisOutput(BaseModel):
     probe_question: Optional[str] = None
     iteration_complete: bool
     animation_key: Optional[str] = None
+    teaching: Optional[TeachingContent] = None
 
     @model_validator(mode="after")
     def _validate_diagnosis(self) -> "DiagnosisOutput":

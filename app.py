@@ -209,6 +209,31 @@ elif st.session_state.view == "final":
     st.error(f"Error classification: **{error_cls}**")
     st.info(diagnosis.get("feedback", ""))
 
+    # ── Teaching section ──────────────────────────────────────────────────────
+    teaching = diagnosis.get("teaching")
+    if teaching:
+        st.divider()
+        st.subheader("How to Solve This")
+
+        st.markdown("**Core Concept**")
+        st.write(teaching.get("concept_summary", ""))
+
+        approach = teaching.get("general_approach", [])
+        if approach:
+            st.markdown("**General Approach** (use this method for similar problems)")
+            for i, step in enumerate(approach, 1):
+                st.write(f"{i}. {step}")
+
+        solution = teaching.get("worked_solution", [])
+        if solution:
+            st.markdown("**Worked Solution**")
+            for i, step in enumerate(solution, 1):
+                st.write(f"{i}. {step}")
+
+        pitfall = teaching.get("common_pitfall", "")
+        if pitfall:
+            st.warning(f"**Common Pitfall:** {pitfall}")
+
     coverage = diagnosis.get("coverage_matrix", [])
     if coverage:
         st.subheader("Coverage Matrix")
