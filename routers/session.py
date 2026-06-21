@@ -367,5 +367,6 @@ async def get_learning_guide(session_id: str, background_tasks: BackgroundTasks)
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

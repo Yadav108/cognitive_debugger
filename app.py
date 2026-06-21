@@ -123,11 +123,7 @@ if st.session_state.view == "create":
                         
                         # Get teaching content from the dedicated endpoint
                         with st.spinner("Generating teaching content…"):
-                            teach_resp = _post(
-                                f"{API_BASE}/{session_id}/learn",
-                                data={},
-                                timeout=REQUEST_TIMEOUT,
-                            )
+                            teach_resp = _get(f"{API_BASE}/{session_id}/learn")
                             teach_resp.raise_for_status()
                             teach_data = teach_resp.json()
                             teaching = teach_data.get("teaching", {})
