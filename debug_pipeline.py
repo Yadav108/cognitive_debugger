@@ -77,6 +77,7 @@ def try_parse(raw: str, label: str) -> dict | None:
             print(f"[{label}] Stripped candidate (first 300 chars):\n{candidate[:300]}")
 
     # Attempt 3: find the first { ... } block (handles preamble text + no closing fence)
+    
     brace_match = re.search(r"(\{[\s\S]*\})", raw)
     if brace_match:
         candidate = brace_match.group(1).strip()

@@ -340,3 +340,32 @@ async def get_session_state(session_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/learn")
+async def get_learning_guide(session_id: str, background_tasks: BackgroundTasks):
+    """Generate teaching content for a problem (learning guide endpoint)."""
+    try:
+        from orchestrator.pipeline import run_teaching_only
+        
+        row = await get_session(session_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        session = await _reconstruct_session(row)
+        domain = row["domain"]
+        
+        # Generate teaching content directly
+        teaching = await run_teaching_only(
+            session_id, session.problem_text, session.concept_graph, domain, background_tasks
+        )
+        
+        if teaching is None:
+            raise HTTPException(status_code=500, detail="Failed to generate teaching content")
+        
+        return {"teaching": teaching.model_dump()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -696,3 +696,51 @@ async def run_diagnosis(
         )
 
     return diagnosis
+
+
+async def run_teaching_only(
+    session_id: str,
+    problem_text: str,
+    graph: ConceptGraph,
+    domain: str,
+    background_tasks: BackgroundTasks,
+) -> TeachingContent | None:
+    """Generate teaching content for a learning guide (without diagnosis).
+    
+    Skips the full diagnosis pipeline and goes directly to teaching content generation.
+    """
+    from prompts.p12_teach import P12_SYSTEM, P12_USER
+    
+    try:
+        result = await _llm_call(
+            session_id, None, "P12_teach_learn",
+            P12_SYSTEM,
+            P12_USER.format(
+                domain=domain,
+                problem_text=problem_text,
+                concept_graph_json=graph.model_dump_json(),
+                root_divergence_json="null",
+                error_classification="conceptual",
+                feedback="Learning request - showing how to solve this problem.",
+            ),
+            background_tasks,
+            max_tokens=2048,
+        )
+        
+        if result is None:
+            return None
+        
+        try:
+            teaching = TeachingContent(
+                concept_summary=result["concept_summary"],
+                general_approach=_general_approach_from_graph(graph),
+                worked_solution=result["worked_solution"],
+                common_pitfall=result["common_pitfall"],
+            )
+            return teaching
+        except (KeyError, ValidationError) as e:
+            print(f"[pipeline] TeachingContent assembly failed: {e}")
+            return None
+    except Exception as e:
+        print(f"[pipeline] run_teaching_only failed: {e}")
+        return None

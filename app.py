@@ -121,17 +121,16 @@ if st.session_state.view == "create":
                         payload = resp.json()
                         session_id = payload["session_id"]
                         
-                        # Submit empty work to trigger diagnosis and teaching content
+                        # Get teaching content from the dedicated endpoint
                         with st.spinner("Generating teaching content…"):
-                            submit_resp = _post(
-                                f"{API_BASE}/{session_id}/submit",
-                                data={"student_work_text": "I need to learn how to solve this problem."},
+                            teach_resp = _post(
+                                f"{API_BASE}/{session_id}/learn",
+                                data={},
                                 timeout=REQUEST_TIMEOUT,
                             )
-                            submit_resp.raise_for_status()
-                            diagnosis = submit_resp.json()
-                            
-                            teaching = diagnosis.get("teaching", {})
+                            teach_resp.raise_for_status()
+                            teach_data = teach_resp.json()
+                            teaching = teach_data.get("teaching", {})
                             
                             if teaching:
                                 st.success("Learning Guide Generated!")
