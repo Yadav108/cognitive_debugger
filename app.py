@@ -40,6 +40,7 @@ def _init():
         "anim_script": None,
         # Learning guide state
         "learn_session_id": None,
+        "learn_teaching": {},
         "learn_anim_polling": False,
         "learn_anim_url": None,
         "learn_anim_error": None,
@@ -112,125 +113,138 @@ if st.session_state.view == "create":
             show_solution = st.checkbox("Worked Solution", value=True)
         show_pitfall = st.checkbox("Common Pitfall", value=True)
         
-        if st.button("Get Learning Guide", type="primary"):
-            if not learning_problem.strip():
-                st.error("Problem statement is required.")
-            else:
-                with st.spinner("Generating learning guide…"):
-                    try:
-                        resp = _post(
-                            f"{API_BASE}/create",
-                            data={"problem_text": learning_problem, "domain": learning_domain},
-                            timeout=CREATE_SESSION_TIMEOUT,
-                        )
-                        resp.raise_for_status()
-                        payload = resp.json()
-                        session_id = payload["session_id"]
-                        
-                        # Get teaching content from the dedicated endpoint
-                        with st.spinner("Generating teaching content…"):
-                            teach_resp = _get(f"{API_BASE}/{session_id}/learn")
-                            teach_resp.raise_for_status()
-                            teach_data = teach_resp.json()
-                            teaching = teach_data.get("teaching", {})
+        # Check if we already have a learning session generated
+        if st.session_state.learn_session_id is None:
+            if st.button("Get Learning Guide", type="primary"):
+                if not learning_problem.strip():
+                    st.error("Problem statement is required.")
+                else:
+                    with st.spinner("Generating learning guide…"):
+                        try:
+                            resp = _post(
+                                f"{API_BASE}/create",
+                                data={"problem_text": learning_problem, "domain": learning_domain},
+                                timeout=CREATE_SESSION_TIMEOUT,
+                            )
+                            resp.raise_for_status()
+                            payload = resp.json()
+                            st.session_state.learn_session_id = payload["session_id"]
                             
-                            if teaching:
-                                st.success("Learning Guide Generated!")
-                                st.divider()
-                                
-                                if show_concept and teaching.get("concept_summary"):
-                                    st.markdown("### 📖 Core Concept")
-                                    st.write(teaching.get("concept_summary"))
-                                
-                                if show_approach and teaching.get("general_approach"):
-                                    st.markdown("### 🎯 General Approach")
-                                    for i, step in enumerate(teaching.get("general_approach", []), 1):
-                                        st.write(f"{i}. {step}")
-                                
-                                if show_solution and teaching.get("worked_solution"):
-                                    st.markdown("### ✅ Worked Solution")
-                                    for i, step in enumerate(teaching.get("worked_solution", []), 1):
-                                        st.write(f"{i}. {step}")
-                                
-                                if show_pitfall and teaching.get("common_pitfall"):
-                                    st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
-                                
-                                # Store session_id for animation generation
-                                st.session_state.learn_session_id = session_id
-                                
-                                st.divider()
-                                st.subheader("📺 Visualisation")
-                                
-                                # Polling loop: runs on every rerun while learn_anim_polling=True
-                                if st.session_state.learn_anim_polling:
-                                    try:
-                                        status_resp = _get(f"{API_BASE}/{session_id}/animate/status")
-                                        status_resp.raise_for_status()
-                                        anim = status_resp.json()
-                                    except Exception as poll_exc:
-                                        st.session_state.learn_anim_polling = False
-                                        st.session_state.learn_anim_error = f"Status poll failed: {poll_exc}"
-                                        st.rerun()
-                                    else:
-                                        anim_status = anim.get("status", "idle")
-                                        if anim_status == "rendering":
-                                            with st.spinner("Rendering animation (~20s)…"):
-                                                time.sleep(3)
-                                            st.rerun()
-                                        elif anim_status == "done":
-                                            st.session_state.learn_anim_polling = False
-                                            st.session_state.learn_anim_url = anim.get("url")
-                                            st.session_state.learn_anim_script = anim.get("script")
-                                            st.rerun()
-                                        elif anim_status == "error":
-                                            st.session_state.learn_anim_polling = False
-                                            st.session_state.learn_anim_error = anim.get("error", "Unknown render error")
-                                            st.session_state.learn_anim_script = anim.get("script")
-                                            st.rerun()
-                                
-                                # Show video when ready
-                                if st.session_state.learn_anim_url:
-                                    video_url = f"{API_HOST}{st.session_state.learn_anim_url}"
-                                    st.video(video_url)
-                                    with st.expander("View generated Manim script", expanded=False):
-                                        st.code(st.session_state.learn_anim_script or "", language="python")
-                                
-                                # Show error with retry
-                                elif st.session_state.learn_anim_error:
-                                    st.error(f"Animation failed: {st.session_state.learn_anim_error}")
-                                    with st.expander("View generated Manim script (debug)", expanded=False):
-                                        st.code(st.session_state.learn_anim_script or "(script not generated)", language="python")
-                                    if st.button("Retry Animation"):
-                                        st.session_state.learn_anim_error = None
-                                        st.session_state.learn_anim_script = None
-                                        try:
-                                            resp = _post(
-                                                f"{API_BASE}/{session_id}/animate",
-                                                data={"error_classification": "conceptual"},
-                                            )
-                                            resp.raise_for_status()
-                                            st.session_state.learn_anim_polling = True
-                                            st.rerun()
-                                        except Exception as exc:
-                                            st.error(f"Failed to start animation: {exc}")
-                                
-                                # Generate button (idle state)
-                                elif not st.session_state.learn_anim_polling:
-                                    if st.button("Generate Animation", type="primary"):
-                                        try:
-                                            resp = _post(
-                                                f"{API_BASE}/{session_id}/animate",
-                                                data={"error_classification": "conceptual"},
-                                            )
-                                            resp.raise_for_status()
-                                            st.session_state.learn_anim_polling = True
-                                            st.rerun()
-                                        except Exception as exc:
-                                            st.error(f"Failed to start animation: {exc}")
-                            else:
-                                st.info("Unable to generate teaching content at this time.")
-                    except Exception as exc:
-                        st.error(f"Failed to generate learning guide: {exc}")
+                            # Get teaching content from the dedicated endpoint
+                            with st.spinner("Generating teaching content…"):
+                                teach_resp = _get(f"{API_BASE}/{st.session_state.learn_session_id}/learn")
+                                teach_resp.raise_for_status()
+                                teach_data = teach_resp.json()
+                                st.session_state.learn_teaching = teach_data.get("teaching", {})
+                                st.rerun()
+                        except Exception as exc:
+                            st.error(f"Failed to generate learning guide: {exc}")
+        
+        # Display learning guide if we have one
+        if st.session_state.learn_session_id is not None:
+            teaching = st.session_state.learn_teaching if hasattr(st.session_state, 'learn_teaching') else {}
+            
+            if teaching:
+                st.success("Learning Guide Generated!")
+                st.divider()
+                
+                if show_concept and teaching.get("concept_summary"):
+                    st.markdown("### 📖 Core Concept")
+                    st.write(teaching.get("concept_summary"))
+                
+                if show_approach and teaching.get("general_approach"):
+                    st.markdown("### 🎯 General Approach")
+                    for i, step in enumerate(teaching.get("general_approach", []), 1):
+                        st.write(f"{i}. {step}")
+                
+                if show_solution and teaching.get("worked_solution"):
+                    st.markdown("### ✅ Worked Solution")
+                    for i, step in enumerate(teaching.get("worked_solution", []), 1):
+                        st.write(f"{i}. {step}")
+                
+                if show_pitfall and teaching.get("common_pitfall"):
+                    st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
+                
+                st.divider()
+                st.subheader("📺 Visualisation")
+                session_id = st.session_state.learn_session_id
+                
+                # Polling loop: runs on every rerun while learn_anim_polling=True
+                if st.session_state.learn_anim_polling:
+                    try:
+                        status_resp = _get(f"{API_BASE}/{session_id}/animate/status")
+                        status_resp.raise_for_status()
+                        anim = status_resp.json()
+                    except Exception as poll_exc:
+                        st.session_state.learn_anim_polling = False
+                        st.session_state.learn_anim_error = f"Status poll failed: {poll_exc}"
+                        st.rerun()
+                    else:
+                        anim_status = anim.get("status", "idle")
+                        if anim_status == "rendering":
+                            with st.spinner("Rendering animation (~20s)…"):
+                                time.sleep(3)
+                            st.rerun()
+                        elif anim_status == "done":
+                            st.session_state.learn_anim_polling = False
+                            st.session_state.learn_anim_url = anim.get("url")
+                            st.session_state.learn_anim_script = anim.get("script")
+                            st.rerun()
+                        elif anim_status == "error":
+                            st.session_state.learn_anim_polling = False
+                            st.session_state.learn_anim_error = anim.get("error", "Unknown render error")
+                            st.session_state.learn_anim_script = anim.get("script")
+                            st.rerun()
+                
+                # Show video when ready
+                if st.session_state.learn_anim_url:
+                    video_url = f"{API_HOST}{st.session_state.learn_anim_url}"
+                    st.video(video_url)
+                    with st.expander("View generated Manim script", expanded=False):
+                        st.code(st.session_state.learn_anim_script or "", language="python")
+                
+                # Show error with retry
+                elif st.session_state.learn_anim_error:
+                    st.error(f"Animation failed: {st.session_state.learn_anim_error}")
+                    with st.expander("View generated Manim script (debug)", expanded=False):
+                        st.code(st.session_state.learn_anim_script or "(script not generated)", language="python")
+                    if st.button("Retry Animation"):
+                        st.session_state.learn_anim_error = None
+                        st.session_state.learn_anim_script = None
+                        try:
+                            resp = _post(
+                                f"{API_BASE}/{session_id}/animate",
+                                data={"error_classification": "conceptual"},
+                            )
+                            resp.raise_for_status()
+                            st.session_state.learn_anim_polling = True
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Failed to start animation: {exc}")
+                
+                # Generate button (idle state)
+                elif not st.session_state.learn_anim_polling:
+                    if st.button("Generate Animation", type="primary"):
+                        try:
+                            resp = _post(
+                                f"{API_BASE}/{session_id}/animate",
+                                data={"error_classification": "conceptual"},
+                            )
+                            resp.raise_for_status()
+                            st.session_state.learn_anim_polling = True
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Failed to start animation: {exc}")
+                
+                st.divider()
+                if st.button("🔄 Start New Learning Session"):
+                    st.session_state.learn_session_id = None
+                    st.session_state.learn_teaching = {}
+                    st.session_state.learn_anim_polling = False
+                    st.session_state.learn_anim_url = None
+                    st.session_state.learn_anim_error = None
+                    st.session_state.learn_anim_script = None
+                    st.rerun()
 
 
 # ── View 2 — Submit Student Work ─────────────────────────────────────────────
