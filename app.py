@@ -52,40 +52,106 @@ st.title("Cognitive Debugger")
 # ── View 1 — Submit Problem ───────────────────────────────────────────────────
 
 if st.session_state.view == "create":
-    st.subheader("Submit a Problem")
+    tab1, tab2 = st.tabs(["📝 Analyze Problem", "📚 Learn Solution"])
+    
+    with tab1:
+        st.subheader("Submit a Problem")
 
-    problem_text = st.text_area("Problem statement", height=150)
-    domain = st.selectbox("Domain", DOMAINS)
-    image_file = st.file_uploader(
-        "Problem diagram (optional)", type=["png", "jpg", "jpeg"]
-    )
+        problem_text = st.text_area("Problem statement", height=150)
+        domain = st.selectbox("Domain", DOMAINS)
+        image_file = st.file_uploader(
+            "Problem diagram (optional)", type=["png", "jpg", "jpeg"]
+        )
 
-    if st.button("Analyze Problem", type="primary"):
-        if not problem_text.strip():
-            st.error("Problem statement is required.")
-        else:
-            with st.spinner("Building concept graph…"):
-                try:
-                    files = (
-                        {"image": (image_file.name, image_file.getvalue(), "image/jpeg")}
-                        if image_file
-                        else None
-                    )
-                    resp = _post(
-                        f"{API_BASE}/create",
-                        data={"problem_text": problem_text, "domain": domain},
-                        files=files,
-                        timeout=CREATE_SESSION_TIMEOUT,
-                    )
-                    resp.raise_for_status()
-                    payload = resp.json()
-                    st.session_state.session_id = payload["session_id"]
-                    st.session_state.problem_text = problem_text
-                    st.session_state.domain = domain
-                    st.session_state.view = "submit"
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Failed to create session: {exc}")
+        if st.button("Analyze Problem", type="primary"):
+            if not problem_text.strip():
+                st.error("Problem statement is required.")
+            else:
+                with st.spinner("Building concept graph…"):
+                    try:
+                        files = (
+                            {"image": (image_file.name, image_file.getvalue(), "image/jpeg")}
+                            if image_file
+                            else None
+                        )
+                        resp = _post(
+                            f"{API_BASE}/create",
+                            data={"problem_text": problem_text, "domain": domain},
+                            files=files,
+                            timeout=CREATE_SESSION_TIMEOUT,
+                        )
+                        resp.raise_for_status()
+                        payload = resp.json()
+                        st.session_state.session_id = payload["session_id"]
+                        st.session_state.problem_text = problem_text
+                        st.session_state.domain = domain
+                        st.session_state.view = "submit"
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to create session: {exc}")
+    
+    with tab2:
+        st.subheader("Learn How to Solve a Problem")
+        st.markdown("Enter a problem and select available solving methods to learn the solution step by step.")
+        
+        learning_problem = st.text_area("Problem statement", height=150, key="learn_problem")
+        learning_domain = st.selectbox("Domain", DOMAINS, key="learn_domain")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            show_concept = st.checkbox("Core Concept", value=True)
+        with col2:
+            show_approach = st.checkbox("General Approach", value=True)
+        with col3:
+            show_solution = st.checkbox("Worked Solution", value=True)
+        show_pitfall = st.checkbox("Common Pitfall", value=True)
+        
+        if st.button("Get Learning Guide", type="primary"):
+            if not learning_problem.strip():
+                st.error("Problem statement is required.")
+            else:
+                with st.spinner("Generating learning guide…"):
+                    try:
+                        resp = _post(
+                            f"{API_BASE}/create",
+                            data={"problem_text": learning_problem, "domain": learning_domain},
+                            timeout=CREATE_SESSION_TIMEOUT,
+                        )
+                        resp.raise_for_status()
+                        payload = resp.json()
+                        session_id = payload["session_id"]
+                        
+                        # Fetch the session to get teaching content
+                        hist_resp = _get(f"{API_BASE}/{session_id}/history")
+                        hist_resp.raise_for_status()
+                        hist = hist_resp.json()
+                        
+                        if hist.get("iterations"):
+                            teaching = hist["iterations"][-1].get("teaching", {})
+                            
+                            st.success("Learning Guide Generated!")
+                            st.divider()
+                            
+                            if show_concept and teaching.get("concept_summary"):
+                                st.markdown("### 📖 Core Concept")
+                                st.write(teaching.get("concept_summary"))
+                            
+                            if show_approach and teaching.get("general_approach"):
+                                st.markdown("### 🎯 General Approach")
+                                for i, step in enumerate(teaching.get("general_approach", []), 1):
+                                    st.write(f"{i}. {step}")
+                            
+                            if show_solution and teaching.get("worked_solution"):
+                                st.markdown("### ✅ Worked Solution")
+                                for i, step in enumerate(teaching.get("worked_solution", []), 1):
+                                    st.write(f"{i}. {step}")
+                            
+                            if show_pitfall and teaching.get("common_pitfall"):
+                                st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
+                        else:
+                            st.info("No iterations found in response.")
+                    except Exception as exc:
+                        st.error(f"Failed to generate learning guide: {exc}")
 
 
 # ── View 2 — Submit Student Work ─────────────────────────────────────────────
