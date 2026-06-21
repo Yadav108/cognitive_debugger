@@ -7,7 +7,7 @@ API_BASE = "http://localhost:8000/session"
 API_HOST = "http://localhost:8000"
 # Session creation can take longer because it runs concept-graph generation + self-check.
 REQUEST_TIMEOUT = 120.0
-CREATE_SESSION_TIMEOUT = 300.0
+CREATE_SESSION_TIMEOUT = 600.0
 DOMAINS = ["statics", "dynamics", "circuits", "thermodynamics", "general"]
 
 
