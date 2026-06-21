@@ -121,35 +121,40 @@ if st.session_state.view == "create":
                         payload = resp.json()
                         session_id = payload["session_id"]
                         
-                        # Fetch the session to get teaching content
-                        hist_resp = _get(f"{API_BASE}/{session_id}/history")
-                        hist_resp.raise_for_status()
-                        hist = hist_resp.json()
-                        
-                        if hist.get("iterations"):
-                            teaching = hist["iterations"][-1].get("teaching", {})
+                        # Submit empty work to trigger diagnosis and teaching content
+                        with st.spinner("Generating teaching content…"):
+                            submit_resp = _post(
+                                f"{API_BASE}/{session_id}/submit",
+                                data={"student_work_text": "I need to learn how to solve this problem."},
+                                timeout=REQUEST_TIMEOUT,
+                            )
+                            submit_resp.raise_for_status()
+                            diagnosis = submit_resp.json()
                             
-                            st.success("Learning Guide Generated!")
-                            st.divider()
+                            teaching = diagnosis.get("teaching", {})
                             
-                            if show_concept and teaching.get("concept_summary"):
-                                st.markdown("### 📖 Core Concept")
-                                st.write(teaching.get("concept_summary"))
-                            
-                            if show_approach and teaching.get("general_approach"):
-                                st.markdown("### 🎯 General Approach")
-                                for i, step in enumerate(teaching.get("general_approach", []), 1):
-                                    st.write(f"{i}. {step}")
-                            
-                            if show_solution and teaching.get("worked_solution"):
-                                st.markdown("### ✅ Worked Solution")
-                                for i, step in enumerate(teaching.get("worked_solution", []), 1):
-                                    st.write(f"{i}. {step}")
-                            
-                            if show_pitfall and teaching.get("common_pitfall"):
-                                st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
-                        else:
-                            st.info("No iterations found in response.")
+                            if teaching:
+                                st.success("Learning Guide Generated!")
+                                st.divider()
+                                
+                                if show_concept and teaching.get("concept_summary"):
+                                    st.markdown("### 📖 Core Concept")
+                                    st.write(teaching.get("concept_summary"))
+                                
+                                if show_approach and teaching.get("general_approach"):
+                                    st.markdown("### 🎯 General Approach")
+                                    for i, step in enumerate(teaching.get("general_approach", []), 1):
+                                        st.write(f"{i}. {step}")
+                                
+                                if show_solution and teaching.get("worked_solution"):
+                                    st.markdown("### ✅ Worked Solution")
+                                    for i, step in enumerate(teaching.get("worked_solution", []), 1):
+                                        st.write(f"{i}. {step}")
+                                
+                                if show_pitfall and teaching.get("common_pitfall"):
+                                    st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
+                            else:
+                                st.info("Unable to generate teaching content at this time.")
                     except Exception as exc:
                         st.error(f"Failed to generate learning guide: {exc}")
 
