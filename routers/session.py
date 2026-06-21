@@ -342,7 +342,7 @@ async def get_session_state(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{session_id}/learn")
+@router.get("/{session_id}/learn")
 async def get_learning_guide(session_id: str, background_tasks: BackgroundTasks):
     """Generate teaching content for a problem (learning guide endpoint)."""
     try:
