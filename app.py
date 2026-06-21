@@ -38,6 +38,12 @@ def _init():
         "anim_url": None,
         "anim_error": None,
         "anim_script": None,
+        # Learning guide state
+        "learn_session_id": None,
+        "learn_anim_polling": False,
+        "learn_anim_url": None,
+        "learn_anim_error": None,
+        "learn_anim_script": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -148,6 +154,79 @@ if st.session_state.view == "create":
                                 
                                 if show_pitfall and teaching.get("common_pitfall"):
                                     st.warning(f"⚠️ **Common Pitfall:** {teaching.get('common_pitfall')}")
+                                
+                                # Store session_id for animation generation
+                                st.session_state.learn_session_id = session_id
+                                
+                                st.divider()
+                                st.subheader("📺 Visualisation")
+                                
+                                # Polling loop: runs on every rerun while learn_anim_polling=True
+                                if st.session_state.learn_anim_polling:
+                                    try:
+                                        status_resp = _get(f"{API_BASE}/{session_id}/animate/status")
+                                        status_resp.raise_for_status()
+                                        anim = status_resp.json()
+                                    except Exception as poll_exc:
+                                        st.session_state.learn_anim_polling = False
+                                        st.session_state.learn_anim_error = f"Status poll failed: {poll_exc}"
+                                        st.rerun()
+                                    else:
+                                        anim_status = anim.get("status", "idle")
+                                        if anim_status == "rendering":
+                                            with st.spinner("Rendering animation (~20s)…"):
+                                                time.sleep(3)
+                                            st.rerun()
+                                        elif anim_status == "done":
+                                            st.session_state.learn_anim_polling = False
+                                            st.session_state.learn_anim_url = anim.get("url")
+                                            st.session_state.learn_anim_script = anim.get("script")
+                                            st.rerun()
+                                        elif anim_status == "error":
+                                            st.session_state.learn_anim_polling = False
+                                            st.session_state.learn_anim_error = anim.get("error", "Unknown render error")
+                                            st.session_state.learn_anim_script = anim.get("script")
+                                            st.rerun()
+                                
+                                # Show video when ready
+                                if st.session_state.learn_anim_url:
+                                    video_url = f"{API_HOST}{st.session_state.learn_anim_url}"
+                                    st.video(video_url)
+                                    with st.expander("View generated Manim script", expanded=False):
+                                        st.code(st.session_state.learn_anim_script or "", language="python")
+                                
+                                # Show error with retry
+                                elif st.session_state.learn_anim_error:
+                                    st.error(f"Animation failed: {st.session_state.learn_anim_error}")
+                                    with st.expander("View generated Manim script (debug)", expanded=False):
+                                        st.code(st.session_state.learn_anim_script or "(script not generated)", language="python")
+                                    if st.button("Retry Animation"):
+                                        st.session_state.learn_anim_error = None
+                                        st.session_state.learn_anim_script = None
+                                        try:
+                                            resp = _post(
+                                                f"{API_BASE}/{session_id}/animate",
+                                                data={"error_classification": "conceptual"},
+                                            )
+                                            resp.raise_for_status()
+                                            st.session_state.learn_anim_polling = True
+                                            st.rerun()
+                                        except Exception as exc:
+                                            st.error(f"Failed to start animation: {exc}")
+                                
+                                # Generate button (idle state)
+                                elif not st.session_state.learn_anim_polling:
+                                    if st.button("Generate Animation", type="primary"):
+                                        try:
+                                            resp = _post(
+                                                f"{API_BASE}/{session_id}/animate",
+                                                data={"error_classification": "conceptual"},
+                                            )
+                                            resp.raise_for_status()
+                                            st.session_state.learn_anim_polling = True
+                                            st.rerun()
+                                        except Exception as exc:
+                                            st.error(f"Failed to start animation: {exc}")
                             else:
                                 st.info("Unable to generate teaching content at this time.")
                     except Exception as exc:
